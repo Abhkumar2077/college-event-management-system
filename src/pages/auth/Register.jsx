@@ -106,7 +106,7 @@ function Register() {
               id="email"
               type="email"
               required
-              placeholder="student@college.edu"
+              placeholder="College/Personal email "
               value={formData.email}
               onChange={(e) => setFormData({...formData, email: e.target.value})}
             />
@@ -126,7 +126,7 @@ function Register() {
               id="department"
               type="text"
               required
-              placeholder="Computer Science"
+              placeholder="BCA/BBA/BCom etc."
               value={formData.department}
               onChange={(e) => setFormData({...formData, department: e.target.value})}
             />

@@ -16,7 +16,8 @@ const registerForEvent = async (req, res) => {
     console.log(`Registering user ${userId} for event ${eventId}`);
 
     // Check if event exists
-    const event = await db.get('SELECT * FROM events WHERE id = ?', [eventId]);
+    const eventResult = await db.query('SELECT * FROM events WHERE id = $1', [eventId]);
+    const event = eventResult.rows[0];
     if (!event) {
       return res.status(404).json({ message: 'Event not found' });
     }
@@ -27,25 +28,28 @@ const registerForEvent = async (req, res) => {
     }
 
     // Check if already registered
-    const existing = await db.get(
-      'SELECT * FROM registrations WHERE user_id = ? AND event_id = ?',
+    const existingResult = await db.query(
+      'SELECT * FROM registrations WHERE user_id = $1 AND event_id = $2',
       [userId, eventId]
     );
+    const existing = existingResult.rows[0];
     if (existing) {
       return res.status(400).json({ message: 'Already registered for this event' });
     }
 
     // Check capacity
-    const registeredCount = await db.get(
-      'SELECT COUNT(*) as count FROM registrations WHERE event_id = ?',
+    const registeredCountResult = await db.query(
+      'SELECT COUNT(*)::int as count FROM registrations WHERE event_id = $1',
       [eventId]
     );
+    const registeredCount = registeredCountResult.rows[0];
     if (registeredCount.count >= event.capacity) {
       return res.status(400).json({ message: 'Event is full' });
     }
 
     // Get user details
-    const user = await db.get('SELECT * FROM users WHERE id = ?', [userId]);
+    const userResult = await db.query('SELECT * FROM users WHERE id = $1', [userId]);
+    const user = userResult.rows[0];
     
     // Generate QR code data
     const qrData = {
@@ -74,16 +78,14 @@ const registerForEvent = async (req, res) => {
     console.log('QR code generated successfully');
 
     // Create registration with QR code
-    const result = await db.run(
+    const result = await db.query(
       `INSERT INTO registrations (user_id, event_id, qr_code, attendance_status) 
-       VALUES (?, ?, ?, ?)`,
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
       [userId, eventId, qrCodeDataURL, 'pending']
     );
 
-    const registration = await db.get(
-      'SELECT * FROM registrations WHERE id = ?',
-      [result.lastID]
-    );
+    const registration = result.rows[0];
 
     console.log('Registration created:', registration.id);
 
@@ -105,10 +107,11 @@ const checkRegistration = async (req, res) => {
     const userId = req.user.id;
     const db = getDb();
 
-    const registration = await db.get(
-      'SELECT * FROM registrations WHERE user_id = ? AND event_id = ?',
+    const registrationResult = await db.query(
+      'SELECT * FROM registrations WHERE user_id = $1 AND event_id = $2',
       [userId, eventId]
     );
+    const registration = registrationResult.rows[0];
 
     res.json({
       isRegistered: !!registration,
@@ -128,14 +131,15 @@ const getMyRegistrations = async (req, res) => {
 
     console.log(`Fetching registrations for user ${userId}`);
 
-    const registrations = await db.all(
+    const registrationsResult = await db.query(
       `SELECT r.*, e.name as event_name, e.date, e.time, e.venue, e.description
        FROM registrations r 
        JOIN events e ON r.event_id = e.id 
-       WHERE r.user_id = ? 
+       WHERE r.user_id = $1 
        ORDER BY r.registration_date DESC`,
       [userId]
     );
+    const registrations = registrationsResult.rows;
 
     console.log(`Found ${registrations.length} registrations`);
     res.json(registrations);
@@ -152,10 +156,11 @@ const getQRCode = async (req, res) => {
     const userId = req.user.id;
     const db = getDb();
 
-    const registration = await db.get(
-      'SELECT * FROM registrations WHERE id = ? AND user_id = ?',
+    const registrationResult = await db.query(
+      'SELECT * FROM registrations WHERE id = $1 AND user_id = $2',
       [registrationId, userId]
     );
+    const registration = registrationResult.rows[0];
 
     if (!registration) {
       return res.status(404).json({ message: 'Registration not found' });
@@ -175,16 +180,17 @@ const cancelRegistration = async (req, res) => {
     const userId = req.user.id;
     const db = getDb();
 
-    const registration = await db.get(
-      'SELECT * FROM registrations WHERE id = ? AND user_id = ?',
+    const registrationResult = await db.query(
+      'SELECT * FROM registrations WHERE id = $1 AND user_id = $2',
       [registrationId, userId]
     );
+    const registration = registrationResult.rows[0];
 
     if (!registration) {
       return res.status(404).json({ message: 'Registration not found' });
     }
 
-    await db.run('DELETE FROM registrations WHERE id = ?', [registrationId]);
+    await db.query('DELETE FROM registrations WHERE id = $1', [registrationId]);
 
     res.json({ message: 'Registration cancelled successfully' });
   } catch (error) {
@@ -198,7 +204,7 @@ const getAllRegistrations = async (req, res) => {
   try {
     const db = getDb();
 
-    const registrations = await db.all(
+    const registrationsResult = await db.query(
       `SELECT r.*, 
         u.name as student_name, 
         u.email as student_email, 
@@ -213,6 +219,7 @@ const getAllRegistrations = async (req, res) => {
        JOIN events e ON r.event_id = e.id 
        ORDER BY r.registration_date DESC`
     );
+     const registrations = registrationsResult.rows;
 
     console.log(`Found ${registrations.length} total registrations for admin`);
     res.json(registrations);
@@ -228,24 +235,26 @@ const approveRegistration = async (req, res) => {
     const { registrationId } = req.params;
     const db = getDb();
 
-    const registration = await db.get(
-      'SELECT * FROM registrations WHERE id = ?',
+    const registrationResult = await db.query(
+      'SELECT * FROM registrations WHERE id = $1',
       [registrationId]
     );
+    const registration = registrationResult.rows[0];
 
     if (!registration) {
       return res.status(404).json({ message: 'Registration not found' });
     }
 
-    await db.run(
-      'UPDATE registrations SET approval_status = ? WHERE id = ?',
+    await db.query(
+      'UPDATE registrations SET approval_status = $1 WHERE id = $2',
       ['approved', registrationId]
     );
 
-    const updated = await db.get(
-      'SELECT * FROM registrations WHERE id = ?',
+    const updatedResult = await db.query(
+      'SELECT * FROM registrations WHERE id = $1',
       [registrationId]
     );
+    const updated = updatedResult.rows[0];
 
     console.log(`Registration ${registrationId} approved by admin`);
     res.json({ message: 'Registration approved successfully', registration: updated });

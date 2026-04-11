@@ -9,12 +9,13 @@ const scanQR = async (req, res) => {
     console.log(`Scanning QR: userId=${userId}, eventId=${eventId}`);
 
     // Check if user is registered for this event
-    const registration = await db.get(
+    const registrationResult = await db.query(
       `SELECT * FROM registrations 
-       WHERE user_id = ? AND event_id = ? 
+       WHERE user_id = $1 AND event_id = $2 
        LIMIT 1`,
       [userId, eventId]
     );
+    const registration = registrationResult.rows[0];
 
     if (!registration) {
       return res.status(400).json({ 
@@ -33,24 +34,25 @@ const scanQR = async (req, res) => {
 
     // Update attendance status and auto-approve registration
     const now = new Date().toISOString();
-    await db.run(
+    await db.query(
       `UPDATE registrations 
-       SET attendance_status = ?, approval_status = ?, check_in_time = ? 
-       WHERE id = ?`,
+       SET attendance_status = $1, approval_status = $2, check_in_time = $3 
+       WHERE id = $4`,
       ['checked_in', 'approved', now, registration.id]
     );
 
     // Get updated registration with student and event details
-    const updated = await db.get(
+    const updatedResult = await db.query(
       `SELECT r.*, 
               u.name as student_name,
               e.name as event_name
        FROM registrations r
        JOIN users u ON r.user_id = u.id
        JOIN events e ON r.event_id = e.id
-       WHERE r.id = ?`,
+       WHERE r.id = $1`,
       [registration.id]
     );
+    const updated = updatedResult.rows[0];
 
     console.log(`Check-in successful: ${updated.student_name} for event ${updated.event_name}`);
 

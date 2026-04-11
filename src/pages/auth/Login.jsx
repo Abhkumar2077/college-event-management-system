@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Calendar, Mail, Lock, LogIn, Shield, Sparkles } from 'lucide-react'
+import { Calendar, Mail, Lock, LogIn } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import toast from 'react-hot-toast'
 
@@ -57,23 +57,6 @@ export default function Login() {
         </div>
         
         <div className="rounded-3xl border border-white/70 bg-white/85 backdrop-blur-xl p-8 shadow-xl">
-          {/* Demo Credentials Alert */}
-          <div className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4">
-            <div className="flex items-start gap-3">
-              <Shield className="h-5 w-5 text-blue-600 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-blue-900 flex items-center gap-1">
-                  <Sparkles className="h-4 w-4" />
-                  Demo Credentials
-                </p>
-                <div className="text-xs text-blue-700 mt-1 space-y-1">
-                  <p><span className="font-mono">student@college.edu</span> / <span className="font-mono">student123</span> (Student)</p>
-                  <p><span className="font-mono">admin@college.edu</span> / <span className="font-mono">admin123</span> (Admin)</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -85,7 +68,7 @@ export default function Login() {
                   type="email"
                   required
                   className="input-field pl-10"
-                  placeholder="student@college.edu"
+                  placeholder="Enter your email"
                   value={formData.email}
                   onChange={(e) => setFormData({...formData, email: e.target.value})}
                 />

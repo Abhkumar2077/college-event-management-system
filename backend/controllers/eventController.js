@@ -18,25 +18,26 @@ const getEvents = async (req, res) => {
     const isAdmin = req.user?.role === 'admin';
 
     // Auto-expire events whose registration deadline has passed.
-    await db.run(
+    await db.query(
       `UPDATE events
        SET status = 'inactive'
        WHERE status = 'active'
          AND register_till IS NOT NULL
-         AND datetime(register_till || ' ' || COALESCE(register_till_time, '23:59:59')) <= datetime('now', 'localtime')`
+         AND (register_till::text || ' ' || COALESCE(register_till_time, '23:59:59'))::timestamp <= CURRENT_TIMESTAMP`
     );
 
-    const events = isAdmin
-      ? await db.all('SELECT * FROM events ORDER BY date ASC')
-      : await db.all('SELECT * FROM events WHERE status = "active" ORDER BY date ASC');
+    const eventsResult = isAdmin
+      ? await db.query('SELECT * FROM events ORDER BY date ASC')
+      : await db.query("SELECT * FROM events WHERE status = 'active' ORDER BY date ASC");
+    const events = eventsResult.rows;
     
     // Get registration count for each event
     for (let event of events) {
-      const count = await db.get(
-        'SELECT COUNT(*) as count FROM registrations WHERE event_id = ?',
+      const countResult = await db.query(
+        'SELECT COUNT(*)::int as count FROM registrations WHERE event_id = $1',
         [event.id]
       );
-      event.registeredCount = count.count;
+      event.registeredCount = countResult.rows[0].count;
     }
     
     res.json(events);
@@ -51,17 +52,18 @@ const getEvents = async (req, res) => {
 const getEventById = async (req, res) => {
   try {
     const db = getDb();
-    const event = await db.get('SELECT * FROM events WHERE id = ?', [req.params.id]);
+    const eventResult = await db.query('SELECT * FROM events WHERE id = $1', [req.params.id]);
+    const event = eventResult.rows[0];
     
     if (!event) {
       return res.status(404).json({ message: 'Event not found' });
     }
     
-    const count = await db.get(
-      'SELECT COUNT(*) as count FROM registrations WHERE event_id = ?',
+    const countResult = await db.query(
+      'SELECT COUNT(*)::int as count FROM registrations WHERE event_id = $1',
       [event.id]
     );
-    event.registeredCount = count.count;
+    event.registeredCount = countResult.rows[0].count;
     
     res.json(event);
   } catch (error) {
@@ -96,9 +98,10 @@ const createEvent = async (req, res) => {
       return res.status(400).json({ message: 'Register close date and time cannot be after event start date and time' });
     }
     
-    const result = await db.run(
+    const result = await db.query(
       `INSERT INTO events (name, description, category, venue, capacity, date, register_till, register_till_time, time, coordinator, coordinator_email) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING *`,
       [
         name,
         description,
@@ -113,9 +116,8 @@ const createEvent = async (req, res) => {
         coordinator_email
       ]
     );
-    
-    const event = await db.get('SELECT * FROM events WHERE id = ?', [result.lastID]);
-    res.status(201).json(event);
+
+    res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('Create event error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -148,11 +150,11 @@ const updateEvent = async (req, res) => {
       return res.status(400).json({ message: 'Register close date and time cannot be after event start date and time' });
     }
     
-    await db.run(
+    await db.query(
       `UPDATE events 
-       SET name = ?, description = ?, category = ?, venue = ?, capacity = ?, 
-           date = ?, register_till = ?, register_till_time = ?, time = ?, coordinator = ?, coordinator_email = ?
-       WHERE id = ?`,
+       SET name = $1, description = $2, category = $3, venue = $4, capacity = $5, 
+         date = $6, register_till = $7, register_till_time = $8, time = $9, coordinator = $10, coordinator_email = $11
+       WHERE id = $12`,
       [
         name,
         description,
@@ -168,9 +170,9 @@ const updateEvent = async (req, res) => {
         req.params.id
       ]
     );
-    
-    const event = await db.get('SELECT * FROM events WHERE id = ?', [req.params.id]);
-    res.json(event);
+
+    const eventResult = await db.query('SELECT * FROM events WHERE id = $1', [req.params.id]);
+    res.json(eventResult.rows[0]);
   } catch (error) {
     console.error('Update event error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -184,8 +186,8 @@ const deleteEvent = async (req, res) => {
     const db = getDb();
     
     // Delete registrations first
-    await db.run('DELETE FROM registrations WHERE event_id = ?', [req.params.id]);
-    await db.run('DELETE FROM events WHERE id = ?', [req.params.id]);
+    await db.query('DELETE FROM registrations WHERE event_id = $1', [req.params.id]);
+    await db.query('DELETE FROM events WHERE id = $1', [req.params.id]);
     
     res.json({ message: 'Event deleted successfully' });
   } catch (error) {

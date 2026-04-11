@@ -79,7 +79,7 @@ Auth Context provides user to app
 ```
 
 **Test Admin Credentials**:
-- Email: `admin@college.edu`
+- Email: `bca40569.23@bitmesra.ac.in`
 - Password: `admin123`
 
 ---
@@ -273,7 +273,7 @@ Attendance_Logs:
 - [x] Backend starts on port 5000
 - [x] Frontend starts on port 5173
 - [x] Database initializes with tables
-- [x] Admin user created (admin@college.edu / admin123)
+- [x] Admin user created (bca40569.23@bitmesra.ac.in / admin123)
 - [x] Login creates JWT token
 - [x] Events load from database
 - [x] Edit event updates database

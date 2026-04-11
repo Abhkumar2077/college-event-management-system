@@ -16,10 +16,16 @@ const generateToken = (id, email, role) => {
 const register = async (req, res) => {
   try {
     const { email, password, name, roll_number, department, year, phone } = req.body;
+    const normalizedEmail = email?.trim().toLowerCase();
     const db = getDb();
 
+    if (!normalizedEmail) {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+
     // Check if user exists
-    const existingUser = await db.get('SELECT * FROM users WHERE email = ?', [email]);
+    const existingUserResult = await db.query('SELECT * FROM users WHERE email = $1', [normalizedEmail]);
+    const existingUser = existingUserResult.rows[0];
     if (existingUser) {
       return res.status(400).json({ message: 'User already exists' });
     }
@@ -28,15 +34,16 @@ const register = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create user (always as student - no admin registration)
-    const result = await db.run(
+    const result = await db.query(
       `INSERT INTO users (email, password, name, roll_number, department, year, phone, role) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'student')`,
-      [email, hashedPassword, name, roll_number, department, year, phone]
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'student')
+       RETURNING id`,
+      [normalizedEmail, hashedPassword, name, roll_number, department, year, phone]
     );
 
     const user = {
-      id: result.lastID,
-      email,
+      id: result.rows[0].id,
+      email: normalizedEmail,
       name,
       roll_number,
       department,
@@ -63,9 +70,15 @@ const register = async (req, res) => {
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
+    const normalizedEmail = email?.trim().toLowerCase();
     const db = getDb();
 
-    const user = await db.get('SELECT * FROM users WHERE email = ?', [email]);
+    if (!normalizedEmail || !password) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    const userResult = await db.query('SELECT * FROM users WHERE email = $1', [normalizedEmail]);
+    const user = userResult.rows[0];
 
     if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
@@ -104,11 +117,11 @@ const login = async (req, res) => {
 const getMe = async (req, res) => {
   try {
     const db = getDb();
-    const user = await db.get(
-      'SELECT id, email, name, roll_number, department, year, phone, role FROM users WHERE id = ?',
+    const userResult = await db.query(
+      'SELECT id, email, name, roll_number, department, year, phone, role FROM users WHERE id = $1',
       [req.user.id]
     );
-    res.json(user);
+    res.json(userResult.rows[0]);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
