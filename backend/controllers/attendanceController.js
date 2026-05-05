@@ -6,6 +6,13 @@ const scanQR = async (req, res) => {
     const { userId, eventId } = req.body;
     const db = getDb();
 
+    if (!userId || !eventId) {
+      return res.status(400).json({
+        success: false,
+        message: 'userId and eventId are required'
+      });
+    }
+
     console.log(`Scanning QR: userId=${userId}, eventId=${eventId}`);
 
     // Check if user is registered for this event
@@ -24,22 +31,22 @@ const scanQR = async (req, res) => {
       });
     }
 
-    // Check if already checked in
-    if (registration.attendance_status === 'checked_in') {
-      return res.status(400).json({ 
-        success: false,
-        message: 'Student already checked in' 
-      });
-    }
-
-    // Update attendance status and auto-approve registration
+    // Update attendance status and auto-approve registration atomically.
     const now = new Date().toISOString();
-    await db.query(
+    const updateResult = await db.query(
       `UPDATE registrations 
        SET attendance_status = $1, approval_status = $2, check_in_time = $3 
-       WHERE id = $4`,
-      ['checked_in', 'approved', now, registration.id]
+       WHERE id = $4 AND attendance_status <> $5`,
+      ['checked_in', 'approved', now, registration.id, 'checked_in']
     );
+
+    const didUpdate = Number(updateResult.rowCount || 0) > 0;
+    if (!didUpdate) {
+      return res.status(409).json({
+        success: false,
+        message: 'Student already checked in'
+      });
+    }
 
     // Get updated registration with student and event details
     const updatedResult = await db.query(

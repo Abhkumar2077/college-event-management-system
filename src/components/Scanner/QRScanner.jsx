@@ -12,6 +12,7 @@ export default function QRScannerModal({ eventId, eventName, onClose, onScanSucc
   const canvasRef = useRef(null)
   const streamRef = useRef(null)
   const parseErrorToastTimeRef = useRef(0)
+  const isProcessingScanRef = useRef(false)
 
   useEffect(() => {
     startCamera()
@@ -82,6 +83,10 @@ export default function QRScannerModal({ eventId, eventName, onClose, onScanSucc
   }
 
   const handleScan = async (decodedText) => {
+    if (isProcessingScanRef.current) {
+      return true
+    }
+
     const trimmedText = decodedText?.trim()
 
     // Ignore non-JSON codes and keep scanning.
@@ -104,6 +109,8 @@ export default function QRScannerModal({ eventId, eventName, onClose, onScanSucc
         stopCamera()
         return true
       }
+
+      isProcessingScanRef.current = true
       
       // Call API to check in
       try {
@@ -120,6 +127,13 @@ export default function QRScannerModal({ eventId, eventName, onClose, onScanSucc
         })
         
         toast.success(response.data.message)
+
+        if (onScanSuccess) {
+          onScanSuccess({
+            ...qrData,
+            registration: response.data.registration
+          })
+        }
       } catch (apiError) {
         const errorMessage = apiError.response?.data?.message || 'Check-in failed'
         setLastScan({
@@ -127,11 +141,10 @@ export default function QRScannerModal({ eventId, eventName, onClose, onScanSucc
           message: errorMessage
         })
         toast.error(errorMessage)
+      } finally {
+        isProcessingScanRef.current = false
       }
-      
-      if (onScanSuccess) {
-        onScanSuccess(qrData)
-      }
+
       setScanning(false)
       stopCamera()
       return true
@@ -148,6 +161,7 @@ export default function QRScannerModal({ eventId, eventName, onClose, onScanSucc
   }
 
   const resetScanner = () => {
+    isProcessingScanRef.current = false
     setLastScan(null)
     setScanning(true)
     startCamera()

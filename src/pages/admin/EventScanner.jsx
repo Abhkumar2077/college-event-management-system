@@ -73,28 +73,41 @@ export default function EventScanner() {
   }
 
   const handleSuccessfulScan = (scanData) => {
+    const alreadyCheckedIn = allAttendees.some(
+      attendee => attendee.userId === scanData.userId && attendee.attendanceStatus === 'checked_in'
+    )
+
+    if (alreadyCheckedIn) {
+      return
+    }
+
+    const checkInTime = scanData.registration?.check_in_time || new Date().toISOString()
+
     // Update stats
     setStats(prev => ({
       ...prev,
       checkedIn: prev.checkedIn + 1,
-      pending: prev.pending - 1
+      pending: Math.max(0, prev.pending - 1)
     }))
     
     // Update attendees list
     setAllAttendees(prev => prev.map(attendee => 
       attendee.userId === scanData.userId 
-        ? { ...attendee, attendanceStatus: 'checked_in', checkInTime: new Date().toISOString() }
+        ? { ...attendee, attendanceStatus: 'checked_in', checkInTime }
         : attendee
     ))
     
     // Add to recent scans
     const newScan = {
       ...scanData,
-      timestamp: new Date().toISOString(),
+      timestamp: checkInTime,
       eventId: parseInt(eventId)
     }
-    
-    const updatedScans = [newScan, ...recentScans].slice(0, 10)
+
+    const dedupedScans = recentScans.filter(
+      scan => !(scan.userId === newScan.userId && scan.eventId === newScan.eventId)
+    )
+    const updatedScans = [newScan, ...dedupedScans].slice(0, 10)
     setRecentScans(updatedScans)
     localStorage.setItem(`scans_${eventId}`, JSON.stringify(updatedScans))
     
