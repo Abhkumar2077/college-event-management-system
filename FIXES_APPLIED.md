@@ -60,6 +60,31 @@
   - Direct navigation using `navigate()` instead of Link
 - **Impact**: All buttons (Edit, Delete, Scanner, Reports) now clickable
 
+### 8. **Attendance Scan Endpoint Required Admin-Only Permission** ✓ **[LATEST FIX]**
+**File**: `backend/routes/attendance.js`
+- **Issue**: QR scan endpoint had `adminOnly` middleware, blocking students from scanning their QR codes
+- **Problem**: When students scanned QR codes for check-in, the API call to `POST /api/attendance/scan` was rejected with 403 Forbidden
+- **Fix**: Removed `adminOnly` middleware from scanQR route
+  - Changed: `router.post('/scan', protect, adminOnly, scanQR);`
+  - To: `router.post('/scan', protect, scanQR);`
+- **Impact**: Students can now scan their QR codes at event venues for check-in
+
+### 9. **Registration Routes Ordering Issue** ✓ **[LATEST FIX]**
+**File**: `backend/routes/registrations.js`
+- **Issue**: Generic route `/registrations/:eventId` was matching before specific route `/registrations/qr/:registrationId`
+- **Problem**: Express matches routes in order, so `/qr/123` could be matched by `:eventId` instead of `:registrationId`
+- **Fix**: Reordered routes to put more specific routes first:
+  ```javascript
+  // More specific routes first
+  router.get('/my', protect, getMyRegistrations);
+  router.get('/qr/:registrationId', protect, getQRCode);
+  
+  // Less specific routes
+  router.post('/:eventId', protect, registerForEvent);
+  router.get('/check/:eventId', protect, checkRegistration);
+  ```
+- **Impact**: Proper route matching ensures QR code retrieval works correctly
+
 ---
 
 ## Complete Program Flow

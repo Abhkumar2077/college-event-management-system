@@ -11,12 +11,15 @@ const {
   approveRegistration
 } = require('../controllers/registrationController');
 
-router.post('/:eventId', protect, registerForEvent);
-router.get('/check/:eventId', protect, checkRegistration);
+// All routes with static path segments first
 router.get('/my', protect, getMyRegistrations);
-router.get('/all', protect, adminOnly, getAllRegistrations); // Admin only
+router.get('/all', protect, adminOnly, getAllRegistrations);
+router.get('/check/:eventId', protect, checkRegistration);
 router.get('/qr/:registrationId', protect, getQRCode);
-router.post('/:registrationId/approve', protect, adminOnly, approveRegistration); // Admin only
+router.post('/:registrationId/approve', protect, adminOnly, approveRegistration);
 router.delete('/:registrationId', protect, cancelRegistration);
+
+// Generic parameterized routes last (lowest priority)
+router.post('/:eventId', protect, registerForEvent);
 
 module.exports = router;

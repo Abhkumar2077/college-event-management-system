@@ -159,6 +159,21 @@ async function migrateEventSchemaSqlite(queryFn) {
   await ensureEventColumns(queryFn, 'events', existingColumns);
 }
 
+// Ensure registrations table has approval_status column
+async function migrateRegistrationsSchema(queryFn) {
+  try {
+    // Try to add approval_status column if it doesn't exist
+    // SQLite will fail silently if column exists, so we wrap in try-catch
+    await queryFn('ALTER TABLE registrations ADD COLUMN approval_status TEXT DEFAULT \'pending\'');
+    console.log('✅ Added approval_status column to registrations table');
+  } catch (error) {
+    // Column likely already exists, which is fine
+    if (!error.message.includes('already exists') && !error.message.includes('duplicate')) {
+      console.log('ℹ️ approval_status column migration check passed');
+    }
+  }
+}
+
 async function createSchema(executor) {
   for (const statement of executor.schemaStatements) {
     await executor(statement);
@@ -213,6 +228,7 @@ async function initializePostgres() {
   await postgresPool.query('SELECT 1');
   await createSchema(Object.assign((statement) => postgresPool.query(statement), { schemaStatements: postgresSchemaStatements }));
   await migrateEventSchemaPostgres((sql, params) => postgresPool.query(sql, params));
+  await migrateRegistrationsSchema((sql, params) => postgresPool.query(sql, params));
   await migrateLegacyAdminEmail((sql, params) => postgresPool.query(sql, params));
 
   const adminCheck = await postgresPool.query('SELECT * FROM users WHERE role = $1', ['admin']);
@@ -257,6 +273,7 @@ async function initializeSqlite() {
 
   await migrateLegacyAdminEmail((sql, params) => query(sql, params));
   await migrateEventSchemaSqlite((sql, params) => query(sql, params));
+  await migrateRegistrationsSchema((sql, params) => query(sql, params));
 
   const adminCheck = await query('SELECT * FROM users WHERE role = $1', ['admin']);
   if (adminCheck.rows.length === 0) {

@@ -235,6 +235,8 @@ const approveRegistration = async (req, res) => {
     const { registrationId } = req.params;
     const db = getDb();
 
+    console.log(`Attempting to approve registration ${registrationId}`);
+
     const registrationResult = await db.query(
       'SELECT * FROM registrations WHERE id = $1',
       [registrationId]
@@ -245,10 +247,14 @@ const approveRegistration = async (req, res) => {
       return res.status(404).json({ message: 'Registration not found' });
     }
 
+    console.log(`Found registration: ${JSON.stringify(registration)}`);
+
     await db.query(
       'UPDATE registrations SET approval_status = $1 WHERE id = $2',
       ['approved', registrationId]
     );
+
+    console.log(`Updated approval_status to 'approved' for registration ${registrationId}`);
 
     const updatedResult = await db.query(
       'SELECT * FROM registrations WHERE id = $1',
@@ -260,7 +266,8 @@ const approveRegistration = async (req, res) => {
     res.json({ message: 'Registration approved successfully', registration: updated });
   } catch (error) {
     console.error('Approve registration error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
