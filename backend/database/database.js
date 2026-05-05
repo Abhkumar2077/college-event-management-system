@@ -124,6 +124,41 @@ const hasPostgresConfig =
 
 const normalizeSql = (sql) => sql.replace(/\$(\d+)/g, '?');
 
+const eventSchemaColumns = [
+  ['date', 'DATE'],
+  ['register_till', 'DATE'],
+  ['register_till_time', 'TEXT'],
+  ['time', 'TEXT'],
+  ['coordinator', 'TEXT'],
+  ['coordinator_email', 'TEXT'],
+  ['status', "TEXT DEFAULT 'active'"],
+  ['created_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP']
+];
+
+async function ensureEventColumns(queryFn, tableName, existingColumns) {
+  for (const [columnName, columnDefinition] of eventSchemaColumns) {
+    if (!existingColumns.has(columnName)) {
+      await queryFn(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
+      existingColumns.add(columnName);
+    }
+  }
+}
+
+async function migrateEventSchemaPostgres(queryFn) {
+  const result = await queryFn(
+    'SELECT column_name FROM information_schema.columns WHERE table_name = $1',
+    ['events']
+  );
+  const existingColumns = new Set(result.rows.map((row) => row.column_name));
+  await ensureEventColumns(queryFn, 'events', existingColumns);
+}
+
+async function migrateEventSchemaSqlite(queryFn) {
+  const result = await queryFn('PRAGMA table_info(events)');
+  const existingColumns = new Set(result.rows.map((row) => row.name));
+  await ensureEventColumns(queryFn, 'events', existingColumns);
+}
+
 async function createSchema(executor) {
   for (const statement of executor.schemaStatements) {
     await executor(statement);
@@ -177,6 +212,7 @@ async function initializePostgres() {
 
   await postgresPool.query('SELECT 1');
   await createSchema(Object.assign((statement) => postgresPool.query(statement), { schemaStatements: postgresSchemaStatements }));
+  await migrateEventSchemaPostgres((sql, params) => postgresPool.query(sql, params));
   await migrateLegacyAdminEmail((sql, params) => postgresPool.query(sql, params));
 
   const adminCheck = await postgresPool.query('SELECT * FROM users WHERE role = $1', ['admin']);
@@ -220,6 +256,7 @@ async function initializeSqlite() {
   };
 
   await migrateLegacyAdminEmail((sql, params) => query(sql, params));
+  await migrateEventSchemaSqlite((sql, params) => query(sql, params));
 
   const adminCheck = await query('SELECT * FROM users WHERE role = $1', ['admin']);
   if (adminCheck.rows.length === 0) {

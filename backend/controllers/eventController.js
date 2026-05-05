@@ -10,37 +10,74 @@ const buildEventDateTime = (eventDate, eventTime) => {
   return new Date(`${eventDate}T${eventTime || '23:59'}:00`);
 };
 
+const isRegistrationClosed = (event) => {
+  if (!event?.register_till) return false;
+  const closeAt = new Date(`${event.register_till}T${event.register_till_time || '23:59'}:00`);
+  return !Number.isNaN(closeAt.getTime()) && new Date() >= closeAt;
+};
+
+const getRegistrationCount = async (db, eventId) => {
+  try {
+    const countResult = await db.query(
+      'SELECT COUNT(*) as count FROM registrations WHERE event_id = $1',
+      [eventId]
+    );
+    return Number(countResult.rows[0]?.count || 0);
+  } catch (error) {
+    console.warn(`Registration count unavailable for event ${eventId}:`, error.message);
+    return 0;
+  }
+};
+
 // @desc    Get all events
 // @route   GET /api/events
 const getEvents = async (req, res) => {
   try {
     const db = getDb();
-    const isAdmin = req.user?.role === 'admin';
+    // Safely check if user is admin (user might not exist for public routes)
+    const isAdmin = req.user && req.user.role === 'admin';
+    
+    console.log('Fetching events. IsAdmin:', isAdmin);
+    
+    let eventsResult;
+    try {
+      eventsResult = await db.query('SELECT * FROM events ORDER BY date ASC');
+    } catch (queryError) {
+      console.warn('Ordered event query failed, falling back to unordered list:', queryError.message);
+      eventsResult = await db.query('SELECT * FROM events');
+    }
 
-    // Auto-expire events whose registration deadline has passed.
-    await db.query(
-      `UPDATE events
-       SET status = 'inactive'
-       WHERE status = 'active'
-         AND register_till IS NOT NULL
-         AND (register_till::text || ' ' || COALESCE(register_till_time, '23:59:59'))::timestamp <= CURRENT_TIMESTAMP`
-    );
+    const events = eventsResult.rows.sort((left, right) => {
+      const leftDate = left.date ? new Date(left.date).getTime() : Number.POSITIVE_INFINITY;
+      const rightDate = right.date ? new Date(right.date).getTime() : Number.POSITIVE_INFINITY;
 
-    const eventsResult = isAdmin
-      ? await db.query('SELECT * FROM events ORDER BY date ASC')
-      : await db.query("SELECT * FROM events WHERE status = 'active' ORDER BY date ASC");
-    const events = eventsResult.rows;
+      if (leftDate !== rightDate) {
+        return leftDate - rightDate;
+      }
+
+      return Number(left.id || 0) - Number(right.id || 0);
+    });
+
+    // Keep event status in sync
+    for (const event of events) {
+      if (event.status === 'active' && isRegistrationClosed(event)) {
+        try {
+          await db.query("UPDATE events SET status = 'inactive' WHERE id = $1", [event.id]);
+          event.status = 'inactive';
+        } catch (error) {
+          console.warn(`Unable to auto-expire event ${event.id}:`, error.message);
+        }
+      }
+    }
+
+    const visibleEvents = isAdmin ? events : events.filter((event) => (event.status || 'active') === 'active');
     
     // Get registration count for each event
-    for (let event of events) {
-      const countResult = await db.query(
-        'SELECT COUNT(*)::int as count FROM registrations WHERE event_id = $1',
-        [event.id]
-      );
-      event.registeredCount = countResult.rows[0].count;
+    for (const event of visibleEvents) {
+      event.registeredCount = await getRegistrationCount(db, event.id);
     }
     
-    res.json(events);
+    res.json(visibleEvents);
   } catch (error) {
     console.error('Get events error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -59,11 +96,7 @@ const getEventById = async (req, res) => {
       return res.status(404).json({ message: 'Event not found' });
     }
     
-    const countResult = await db.query(
-      'SELECT COUNT(*)::int as count FROM registrations WHERE event_id = $1',
-      [event.id]
-    );
-    event.registeredCount = countResult.rows[0].count;
+    event.registeredCount = await getRegistrationCount(db, event.id);
     
     res.json(event);
   } catch (error) {

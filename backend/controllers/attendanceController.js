@@ -71,7 +71,56 @@ const scanQR = async (req, res) => {
 };
 
 const getAttendance = async (req, res) => {
-  res.json({ message: 'Get attendance endpoint' });
+  try {
+    const { eventId } = req.params;
+    const db = getDb();
+
+    const eventResult = await db.query('SELECT id, name, date, time, venue FROM events WHERE id = $1', [eventId]);
+    const event = eventResult.rows[0];
+
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+
+    const attendanceResult = await db.query(
+      `SELECT r.id,
+              r.user_id,
+              r.event_id,
+              r.attendance_status,
+              r.approval_status,
+              r.check_in_time,
+              r.registration_date,
+              u.name as student_name,
+              u.email as student_email,
+              u.roll_number,
+              u.department,
+              u.year
+       FROM registrations r
+       JOIN users u ON r.user_id = u.id
+       WHERE r.event_id = $1
+       ORDER BY r.registration_date DESC`,
+      [eventId]
+    );
+
+    const registrations = attendanceResult.rows;
+    const checkedIn = registrations.filter((row) => row.attendance_status === 'checked_in').length;
+
+    res.json({
+      event,
+      summary: {
+        totalRegistered: registrations.length,
+        checkedIn,
+        pending: registrations.length - checkedIn,
+        attendanceRate: registrations.length
+          ? Number(((checkedIn / registrations.length) * 100).toFixed(2))
+          : 0
+      },
+      registrations
+    });
+  } catch (error) {
+    console.error('Get attendance error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
 };
 
 module.exports = { scanQR, getAttendance };

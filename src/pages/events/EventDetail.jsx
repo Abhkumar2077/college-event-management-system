@@ -11,7 +11,6 @@ export default function EventDetail() {
   const [loading, setLoading] = useState(true)
   const [isRegistered, setIsRegistered] = useState(false)
   const [registering, setRegistering] = useState(false)
-  const [registrationData, setRegistrationData] = useState(null)
 
   useEffect(() => {
     loadEventData()
@@ -34,9 +33,6 @@ export default function EventDetail() {
     try {
       const response = await registrationAPI.checkRegistration(id)
       setIsRegistered(response.data.isRegistered)
-      if (response.data.registration) {
-        setRegistrationData(response.data.registration)
-      }
     } catch (error) {
       console.error('Error checking registration:', error)
     }
@@ -45,9 +41,8 @@ export default function EventDetail() {
   const handleRegister = async () => {
     setRegistering(true)
     try {
-      const response = await registrationAPI.register(id)
+      await registrationAPI.register(id)
       setIsRegistered(true)
-      setRegistrationData(response.data.registration)
       toast.success('Successfully registered for the event!')
       
       // Show QR code option

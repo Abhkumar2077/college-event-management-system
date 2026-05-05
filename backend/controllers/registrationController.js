@@ -39,11 +39,11 @@ const registerForEvent = async (req, res) => {
 
     // Check capacity
     const registeredCountResult = await db.query(
-      'SELECT COUNT(*)::int as count FROM registrations WHERE event_id = $1',
+      'SELECT COUNT(*) as count FROM registrations WHERE event_id = $1',
       [eventId]
     );
     const registeredCount = registeredCountResult.rows[0];
-    if (registeredCount.count >= event.capacity) {
+    if (Number(registeredCount.count || 0) >= event.capacity) {
       return res.status(400).json({ message: 'Event is full' });
     }
 

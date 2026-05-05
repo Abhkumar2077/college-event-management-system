@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { Calendar, MapPin, Clock, ArrowLeft, Smartphone, CheckCircle, Download } from 'lucide-react'
 import { registrationAPI, eventAPI } from '../../services/api'
 import toast from 'react-hot-toast'
@@ -7,7 +7,6 @@ import toast from 'react-hot-toast'
 export default function MyQRCode() {
   const { eventId } = useParams()
   const navigate = useNavigate()
-  const location = useLocation()
   const [event, setEvent] = useState(null)
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState(null)
@@ -45,7 +44,7 @@ export default function MyQRCode() {
           setQrCodeUrl(userRegistration.qr_code)
         } else {
           console.log('No QR code in registration, generating new one')
-          await generateAndSaveQRCode(currentUser, eventResponse.data, userRegistration.id)
+          await generateAndSaveQRCode(currentUser, eventResponse.data)
         }
       } else {
         toast.error('Registration not found')
@@ -60,7 +59,7 @@ export default function MyQRCode() {
     }
   }
 
-  const generateAndSaveQRCode = async (user, event, registrationId) => {
+  const generateAndSaveQRCode = async (user, event) => {
     const qrData = {
       userId: user.id,
       eventId: event.id,
